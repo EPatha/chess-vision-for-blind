@@ -20,7 +20,15 @@ import io
 import cv2
 import numpy as np
 
-from ultralytics import YOLO
+# Import YOLO with compatibility for different ultralytics layouts
+try:
+    from ultralytics import YOLO
+except Exception:
+    try:
+        from ultralytics.yolo import YOLO
+    except Exception as e:
+        print("Failed to import YOLO from ultralytics. Install with: pip install ultralytics")
+        raise
 
 from chess_board_utils import compute_perspective_transform, pixel_to_square
 
