@@ -29,5 +29,29 @@ Asumsi orientasi:
 
 Jika Anda ingin fitur tambahan (deteksi otomatis sudut papan, deteksi bidak otomatis, output urutan langkah, atau integrasi dengan engine), beri tahu saya dan saya akan tambahkan contoh dan/atau model deteksi.
 
+## Dependencies (untuk Bab 2 - daftar paket dan kegunaan)
+
+Ini proyek Python yang menggunakan beberapa paket utama. Berikut paket yang saya sertakan di `requirements.txt` beserta kegunaannya:
+
+- numpy: operasi numerik dan array dasar.
+- Pillow: pembacaan/penyimpanan gambar (dipakai oleh beberapa utilitas dan library).
+- opencv-python: pemrosesan citra, pembacaan stream (cv2.VideoCapture), transformasi perspektif, dan drawing overlay.
+- torch, torchvision, torchaudio: PyTorch — runtime inference yang dibutuhkan oleh beberapa model/versi `ultralytics`.
+- ultralytics: paket YOLO (v8) untuk inferensi deteksi objek (mengunduh model seperti `yolov8n.pt`).
+- Flask: web framework kecil untuk UI kalibrasi dan streaming MJPEG.
+
+Catatan instalasi penting (macOS):
+- Untuk PyTorch, penggunaan wheel yang tepat tergantung pada arsitektur (Intel vs Apple Silicon) dan apakah Anda ingin CUDA. Rekomendasi singkat untuk CPU-only macOS:
+
+	pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+- Jika `opencv-python` menimbulkan masalah pada build, coba pasang `opencv-python-headless` atau pastikan Xcode Command Line Tools terpasang:
+
+	xcode-select --install
+
+- `ultralytics` biasanya akan mengunduh model YOLO pertama kali saat dipakai; pastikan koneksi internet saat pertama inference.
+
+Jika Anda ingin saya tambahkan file `environment.yml` (Conda) atau `Pipfile` untuk reproducibility, beri tahu arsitektur dan preferensi package manager (pip vs conda) dan saya buatkan.
+
 just upload for github
 add readme
