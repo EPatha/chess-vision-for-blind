@@ -14,11 +14,16 @@ import sys
 
 import cv2
 
+# Import YOLO with compatibility for different ultralytics package layouts
 try:
     from ultralytics import YOLO
-except Exception as e:
-    print("Paket 'ultralytics' tidak ditemukan. Install dengan: pip install ultralytics")
-    raise
+except Exception:
+    try:
+        # some versions expose YOLO in ultralytics.yolo
+        from ultralytics.yolo import YOLO
+    except Exception as e:
+        print("Paket 'ultralytics' tidak ditemukan atau import YOLO gagal. Install with: pip install ultralytics")
+        raise
 
 
 def open_capture(source: str, width: int = None, height: int = None):
