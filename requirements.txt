@@ -17,3 +17,4 @@ ultralytics>=8.0.118
 
 # Web UI
 Flask>=2.0
+requests

@@ -19,6 +19,7 @@ import time
 import io
 import cv2
 import numpy as np
+import requests
 
 # Import YOLO with compatibility for different ultralytics layouts
 try:
@@ -170,15 +171,30 @@ def snapshot():
     source = request.args.get('source') or state.get('source')
     if not source:
         return 'No source provided', 400
-    cap = cv2.VideoCapture(source)
-    if not cap.isOpened():
-        return 'Cannot open source', 500
-    ret, frame = cap.read()
-    cap.release()
-    if not ret:
-        return 'No frame', 500
-    ret, buffer = cv2.imencode('.jpg', frame)
-    return Response(buffer.tobytes(), mimetype='image/jpeg')
+    # Try OpenCV capture first
+    try:
+        cap = cv2.VideoCapture(source)
+        if cap.isOpened():
+            ret, frame = cap.read()
+            cap.release()
+            if ret:
+                ret, buffer = cv2.imencode('.jpg', frame)
+                return Response(buffer.tobytes(), mimetype='image/jpeg')
+    except Exception as e:
+        app.logger.debug('OpenCV snapshot failed: %s', e)
+
+    # Fallback: try HTTP GET for a single-frame endpoint (DroidCam often exposes /shot.jpg or similar)
+    candidates = [source, source.rstrip('/') + '/shot.jpg', source.rstrip('/') + '/image.jpg', source.rstrip('/') + '/photo.jpg']
+    for url in candidates:
+        try:
+            resp = requests.get(url, timeout=3)
+            ct = resp.headers.get('Content-Type', '')
+            if resp.status_code == 200 and ('image' in ct or resp.content[:4] == b'\xff\xd8\xff\xe0'):
+                return Response(resp.content, mimetype='image/jpeg')
+        except Exception as e:
+            app.logger.debug('HTTP snapshot try failed (%s): %s', url, e)
+
+    return 'Cannot open source or retrieve snapshot', 500
 
 
 @app.route('/video_feed')
