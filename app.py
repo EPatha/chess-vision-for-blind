@@ -59,20 +59,29 @@ def get_model():
 
 
 def gen_frames(source):
+    # Try OpenCV VideoCapture first (works for many sources)
     cap = cv2.VideoCapture(source)
+    use_requests_mjpeg = False
     if not cap.isOpened():
-        print(f"Cannot open source: {source}")
-        return
+        app.logger.debug('OpenCV cannot open source, will try HTTP MJPEG fallback: %s', source)
+        use_requests_mjpeg = True
 
     model = get_model()
 
-    while True:
-        success, frame = cap.read()
-        if not success:
-            time.sleep(0.5)
-            cap.release()
-            cap = cv2.VideoCapture(source)
-            continue
+    # Generator loop: either read from OpenCV capture or from HTTP MJPEG stream via requests
+    if not use_requests_mjpeg:
+        while True:
+            success, frame = cap.read()
+            if not success:
+                time.sleep(0.5)
+                cap.release()
+                cap = cv2.VideoCapture(source)
+                # if reopen failed, switch to HTTP MJPEG fallback
+                if not cap.isOpened():
+                    app.logger.debug('Reopen failed; switching to HTTP MJPEG fallback')
+                    use_requests_mjpeg = True
+                    break
+                continue
 
         # inference
         try:
@@ -120,6 +129,77 @@ def gen_frames(source):
         frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+    # HTTP MJPEG fallback: parse multipart/x-mixed-replace and extract JPEG frames
+    if use_requests_mjpeg:
+        app.logger.debug('Starting HTTP MJPEG reader for %s', source)
+        try:
+            resp = requests.get(source, stream=True, timeout=5)
+            if resp.status_code != 200:
+                app.logger.debug('MJPEG fallback HTTP status %s', resp.status_code)
+                return
+
+            buf = b''
+            for chunk in resp.iter_content(chunk_size=4096):
+                if not chunk:
+                    continue
+                buf += chunk
+                # search for JPEG start/end markers
+                start = buf.find(b'\xff\xd8')
+                end = buf.find(b'\xff\xd9')
+                if start != -1 and end != -1 and end > start:
+                    jpg = buf[start:end+2]
+                    buf = buf[end+2:]
+                    # decode to image
+                    arr = np.frombuffer(jpg, dtype=np.uint8)
+                    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    if frame is None:
+                        continue
+
+                    # run inference/rendering similar to OpenCV path
+                    try:
+                        results = model(frame)
+                        annotated = None
+                        try:
+                            annotated = results.render()[0]
+                        except Exception:
+                            try:
+                                annotated = results[0].plot()
+                            except Exception:
+                                annotated = frame
+
+                        if state['M'] is not None:
+                            squares = []
+                            r = results[0]
+                            try:
+                                boxes = r.boxes.xyxy.cpu().numpy()
+                            except Exception:
+                                try:
+                                    boxes = np.array(r.boxes.xyxy)
+                                except Exception:
+                                    boxes = []
+
+                            for i, b in enumerate(boxes):
+                                x1, y1, x2, y2 = b[:4]
+                                cx = float((x1 + x2) / 2.0)
+                                cy = float((y1 + y2) / 2.0)
+                                sq = pixel_to_square((cx, cy), state['M'], board_pixels=state['board_pixels'])
+                                squares.append(sq)
+
+                            cv2.putText(annotated, 'Detected squares: ' + ','.join(squares[:8]), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+                    except Exception as e:
+                        app.logger.debug('MJPEG inference error: %s', e)
+                        annotated = frame
+
+                    ret, buffer = cv2.imencode('.jpg', annotated)
+                    frame_bytes = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+        except Exception as e:
+            app.logger.debug('MJPEG fallback failed: %s', e)
+            return
 
 
 @app.route('/')
