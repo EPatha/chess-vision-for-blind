@@ -1,4 +1,4 @@
-path: ../datasets/roboflow
+path: /Users/ephesiansprismaranatha/Documents/Backup/S1_Udinus/Matkul_Semester_7/TA/chess-vision-for-blind/Chess Pieces Detection Dataset
 
 train: train/images
 val: valid/images
